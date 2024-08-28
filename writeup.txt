@@ -1,0 +1,20 @@
+problem 8/27/2024
+how to handle invalid actions?
+
+observations
+* penalties = model gets scared and tries safe actions (draw)
+* skip = model learns very slowly but is more ambitious
+
+tried
+* penalty = 0.2 -> too scared
+* penalty = 0.01 -> same problem as skip
+
+penalty is a hyperparameter to be optimized
+- we need a penalty large enough such that it doesn't take bad actions and
+learns the rules of the game
+- we need a penalty small enough such that it doesn't get scared and
+only try safe actions
+
+rewards are also a hyperparameter
+- tried large rewards (x100) with -1 penalty -> too scared still
+- tried moderate rewards (x10) with -0.01 penalty -> too ambitious
