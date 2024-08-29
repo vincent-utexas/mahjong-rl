@@ -3,6 +3,7 @@ import torch
 class Discard:
     @staticmethod
     def discard(player, discard_pile, model):
+        # Need to predict which tile to remove
         # Make tileset grid
         tileset_grid = torch.zeros(size=(4, 9), dtype=torch.float32)
         for t in player.tileset:
@@ -22,8 +23,8 @@ class Discard:
             lowest_val_idx = torch.nonzero(valid_tiles).squeeze()[0].item()
             lowest_val = sorted_values[lowest_val_idx].item()
 
-        # Discard lowest value tile
-        discard = player.tileset.remove(lowest_val) # ! problem where this tile is not guaranteed to exist?
+        # Discard lowest value tile, this is guaranteed to exist
+        discard = player.tileset.remove(lowest_val)
         discard_pile[discard.to_coords()] += 1
         return discard
         

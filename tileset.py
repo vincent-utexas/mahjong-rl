@@ -22,16 +22,13 @@ class TileSet:
             return []
         
         if manner == 'first':
-            idx = np.argmax(mask)
-            deleted = self.tiles[idx]
-            self.tiles_n = np.delete(self.tiles_n, idx)
-            self.tiles = np.delete(self.tiles, idx)
-            return deleted
-        elif manner == 'all':
-            deleted = self.tiles[mask]
-            self.tiles_n = np.delete(self.tiles_n, mask)
-            self.tiles = np.delete(self.tiles, mask)
-            return deleted
+            mask = np.argmax(mask)
+
+        deleted = self.tiles[mask]
+        self.tiles_n = np.delete(self.tiles_n, mask)
+        self.tiles = np.delete(self.tiles, mask)
+        
+        return deleted # Note this is either a single tile or an array of tiles
     
     def _remove_as_class(self, cls, manner):
         min, max = type_ranges[cls]
@@ -40,16 +37,13 @@ class TileSet:
             return []
 
         if manner == 'first':
-            idx = np.argmax(mask)
-            deleted = self.tiles[idx]
-            self.tiles_n = np.delete(self.tiles_n, idx)
-            self.tiles = np.delete(self.tiles, idx)
-            return deleted
-        elif manner == 'all':
-            deleted = self.tiles[mask]
-            self.tiles_n = np.delete(self.tiles_n, mask)
-            self.tiles = np.delete(self.tiles, mask)
-            return deleted
+            mask = np.argmax(mask)
+            
+        deleted = self.tiles[mask]
+        self.tiles_n = np.delete(self.tiles_n, mask)
+        self.tiles = np.delete(self.tiles, mask)
+
+        return deleted # Note this is either a single tile or an array of tiles
 
     def remove(self, obj, manner: Literal['first', 'all']='first'):
         if isinstance(obj, int):

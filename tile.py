@@ -50,3 +50,6 @@ class Tile:
 
     def __repr__(self):
         return str(self.val) + self.type
+
+    def __len__(self):
+        return 1

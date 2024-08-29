@@ -3,6 +3,8 @@ from collections import deque
 import gymnasium as gym
 import gymnasium.spaces as spaces
 import numpy as np
+import pygame
+import time
 
 from actions.discard import Discard
 from actions.draw import Draw
@@ -20,6 +22,9 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
 
     def __init__(self):
         super(MahjongEnv, self).__init__()
+
+        self.window = None
+        self.clock = None
         
         self._action_defs = {
             0: self.draw,
@@ -70,11 +75,14 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
         rng = np.random.RandomState(seed=seed)
         self._deck = deque(rng.permutation(deck))
 
+        self._player_states = [Player() for _ in range(4)]
+
         for p in self._player_states:
             deck = []
             for _ in range(13):
                 deck.append(self._deck.pop())
-            p.tileset = p._tileset_full = TileSet(deck)
+            p.tileset = TileSet(deck)
+            p._tileset_full = TileSet(deck)
             p.frozen = TileSet()
 
         # First player gets extra tile, must discard first
@@ -87,10 +95,13 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
 
                 for _ in range(len(honors)):
                     p.tileset.add(self._deck.popleft())
-
+                
         # Do the first step of each round: player_0 discards a tile
         self._discard_model = options['discard_model']
         self._last_tile = self.discard(self._player_states[0], self._discarded, self._discard_model)
+
+        if self.render_mode:
+            self._render_frame()
 
         return self._get_obs(), self._get_info()
 
@@ -98,9 +109,9 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
         agent = self._player_states[self._current_player]
         action = self._action_defs[i_action]
 
-        try: # Agents may try invalid actions
+        if self._can_action_defs[i_action](agent, self._last_tile):
             action(agent, self._last_tile, self._deck, self._discarded)
-        except AssertionError:
+        else:
             truncated = len(self._deck) <= 0
             match self._handle_invalid_action:
                 case "penalty":
@@ -125,15 +136,19 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
         observation = self._get_obs()
         info = self._get_info()
 
+        if self.render_mode:
+            self._render_frame()
+
         self._do_player_update()
         return observation, reward, terminated, truncated, info
 
-    def _do_passing_round(self, i_actions):
+    def do_passing_round(self, i_actions):
         """
         if all actions are illegal, skip and resume play
         return observation, reward, truncated, terminated, info
         """
         # Everyone except the agent who just went has a chance to play
+        # self._current_player = 1 after resetting
         i_actions[self._current_player - 1] = 0
 
         action_priority = sorted(i_actions)[::-1]
@@ -151,7 +166,8 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
                 break
 
         if action and agent: # Must be the highest priority valid action
-            self._action_defs[action]
+            print("skip turn detected!: " + self._action_defs[action])
+            self._action_defs[action](self._player_states[agent], self._last_tile, self._deck, self._discarded)
         else: # No one wants to play a valid move, go to the next turn
             return self._get_obs(), 0, False, False, self._get_info()
 
@@ -178,10 +194,20 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
             self._current_player = 0
 
     def _get_obs(self):
-        board_state = self._discarded.ravel()
+        # board_state = self._discarded.ravel()
         player_state = self._player_states[self._current_player].tileset.to_grid()
-        concat_state = np.append(board_state, player_state)
-        return np.append(concat_state, self._last_tile.to_int())
+        # concat_state = np.append(board_state, player_state)
+        return np.append(player_state, self._last_tile.to_int())
+    
+    def _get_all_obs(self):
+        # board_state = self._discarded.ravel()
+        result = []
+        for i in range(len(self._player_states)):
+            player_state = self._player_states[i].tileset.to_grid()
+            # concat_state = np.append(board_state, player_state)
+            result += [np.append(player_state, self._last_tile.to_int())]
+
+        return result
 
     def _get_info(self):
         return {
@@ -191,3 +217,53 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
             "player_2": self._player_states[2],
             "player_3": self._player_states[3],
         }
+
+    def _render_frame(self):
+        SCREEN_WIDTH = 800
+        SCREEN_HEIGHT = 600
+        BLACK = (0, 0, 0)
+        WHITE = (255, 255, 255)
+        FONT_SIZE = 40
+        NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+
+        if self.window is None:
+            pygame.init()
+            pygame.display.init()
+            self.window = pygame.display.set_mode(
+                (SCREEN_WIDTH, SCREEN_HEIGHT)
+            )
+        
+        if self.clock is None:
+            self.clock = pygame.time.Clock()
+
+        # Set up the display
+        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption('Display Numbers')
+
+        # Set up font
+        font = pygame.font.Font(None, FONT_SIZE)
+
+        screen.fill(BLACK)
+        middle_number = self._last_tile.to_int()
+        middle_position = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        self._draw_number(middle_number, middle_position, font, screen)
+
+        bottom_y = SCREEN_HEIGHT - FONT_SIZE
+        spacing = SCREEN_WIDTH // 20
+        for i, num in enumerate(sorted(self._player_states[0].tileset.tiles_n)):
+            x_position = spacing * (i + 1) - (FONT_SIZE // 2)
+            self._draw_number(num, (x_position, bottom_y), font, screen)
+
+        # Current player
+        self._draw_number(self._current_player, (SCREEN_WIDTH // 2, FONT_SIZE), font, screen)
+
+        pygame.display.flip()
+        self.clock.tick(4)
+    
+    def _draw_number(self, number, position, font, screen):
+        text_surface = font.render(str(number), True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=position)
+        screen.blit(text_surface, text_rect)
+
+    def close(self):
+        pygame.quit()
