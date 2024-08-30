@@ -19,7 +19,7 @@ class Chi:
         min, max = type_ranges[last_tile.type]
         n = last_tile.to_int()
         bounds = Chi._get_bounds(last_tile)
-        if n == min or max: # Figuring out which one is the central pair
+        if n == min or max - 1: # Figuring out which one is the central pair
             idx = 0
         else:
             idx = 1
@@ -45,9 +45,9 @@ class Chi:
             bounds = [(n + 1, n + 2)]
         elif n == min + 1:
             bounds = [(n - 1, n + 1), (n + 1, n + 2)]
-        elif n == max:
+        elif n == max - 1: # Last tile of my class
             bounds = [(n - 2, n - 1)]
-        elif n == max - 1:
+        elif n == max - 2: # Second last tile of my class
             bounds = [(n - 2, n - 1), (n - 1, n + 1)]
         else:
             bounds = [(n - 2, n - 1), (n - 1, n + 1), (n + 1, n + 2)]

@@ -6,66 +6,55 @@ import pandas as pd
 import numpy as np
 from environment import MahjongEnv
 from dqn import DQN, ReplayMemory, Transition
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from copy import deepcopy
 
 BATCH_SIZE = 128
 GAMMA = 0.99
-EPS_START = 0.8
+EPS_START = 0.9
 EPS_END = 0.05
 EPS_DECAY = 1000
 TAU = 0.005
-LR = 1e-4
-PATHNAME = f"./state_dicts/2024-08-28_policy_net"
-
-env = MahjongEnv()
+LR = 1e-5
+LOADPATH = f"./pretrained/2024-08-29_policy_net"
+SAVEPATH = f"./state_dicts/2024-08-30_policy_net"
 
 class EGAgent:
-    # decide between a chi, pung, or draw
-    # always hu, always gan
     def __init__(self, policy_net: DQN):
         self.steps_done = 0
         self.policy_net = policy_net
 
     def select_action(self, state):
+        tileset, tileset_full, last_tile = state.values()
+        tileset_in = np.concatenate((tileset, [last_tile]))
+        tileset_in = torch.from_numpy(tileset_in).float()
+
+        tileset_full_in = np.concatenate((tileset_full, [last_tile]))
+        tileset_full_in = torch.from_numpy(tileset_full_in).float()
+
         sample = random.random()
         eps_threshold = EPS_END + (EPS_START - EPS_END) \
             * math.exp(-1 * self.steps_done / EPS_DECAY)
         self.steps_done += 1
 
-        if sample > eps_threshold:
+        if sample > eps_threshold: # Pick highest Q value
             with torch.no_grad():
-                return torch.argmax(self.policy_net(state)).view((1, 1))
-        else:
+                tileset_pass = self.policy_net(tileset_in)
+                tileset_full_pass = self.policy_net(tileset_full_in)
+                maximum = torch.maximum(tileset_pass, tileset_full_pass)
+                return torch.argmax(maximum).view((1,1))
+        else: # Pick randomly
             return torch.tensor([[env.action_space.sample()]], dtype=torch.long)
 
-def generate_target_net(target_for, n_inputs, n_outputs):
-    net = DQN(n_inputs, n_outputs)
-    net.load_state_dict(target_for.state_dict())
+def generate_target_net(policy_net):
+    net = DQN(n_observations, n_actions)
+    net.load_state_dict(policy_net.state_dict())
     return net
 
-# invalid actions: configure in options?
-# large penalty
-# skip agent turn
-# default: do not permit, try down the list 
-
-n_actions = env.action_space.n
-n_observations = 36 + 1
-
-discard_net = DQN(36 + 36, 36) # my tiles, discarded tiles
-
-# state_dict = torch.load(PATHNAME, weights_only=True) # 1000 iterations
-# policy_net = DQN(73, n_actions)
-# policy_net.load_state_dict(state_dict=state_dict)
-policy_net = DQN(n_observations, n_actions)
-target_net = generate_target_net(policy_net, n_observations, n_actions)
-policy_optim = torch.optim.Adam(policy_net.parameters(), lr=LR)
-
-agent = EGAgent(policy_net)
-
-memory = ReplayMemory(10000)
-
 def optimize_model():
+    global losses
     if len(memory) < BATCH_SIZE:
         return
     
@@ -74,10 +63,14 @@ def optimize_model():
     batch = Transition(*zip(*transitions))
 
     # Don't want to include final states in the weight updates because rewards are known
-    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)))
-    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).view(BATCH_SIZE, n_observations)
+    concatr = lambda tileset, last_tile: np.concatenate((tileset, [last_tile]))
+    tensorfy = lambda concatr: torch.from_numpy(concatr).float()
+    preprocessor = lambda tileset, last_tile: tensorfy(concatr(tileset, last_tile))
 
-    state_batch = torch.cat(batch.state).view(BATCH_SIZE, n_observations)
+    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)))
+    non_final_next_states = torch.cat([preprocessor(s['tileset'], s['last_tile']) for s in batch.next_state if s is not None]).view(BATCH_SIZE, n_observations)
+
+    state_batch = torch.cat([preprocessor(s['tileset'], s['last_tile']) for s in batch.state]).view(BATCH_SIZE, n_observations)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
 
@@ -92,6 +85,7 @@ def optimize_model():
     target_q_values = reward_batch + GAMMA * next_state_action_values
     criterion = torch.nn.SmoothL1Loss() # Huber loss, MSE for small x, MAE for large x
     loss = criterion(state_action_values, target_q_values)
+    losses += [loss.item()]
     
     policy_optim.zero_grad()
     loss.backward()
@@ -114,7 +108,15 @@ def do_sanity_check(records):
 
     for r in records:
         last_tile, action, player = r
-        success = action_defs[action](player, last_tile)
+        if action == 0:
+            success = True
+            for can_action in env._can_action_defs.values():
+                if can_action == env.draw:
+                    continue
+                if can_action(player, last_tile):
+                    success = False
+        else:
+            success = action_defs[action](player, last_tile)
         good_actions += int(success)
         if success:
             counts.loc[named_actions[action], 'good'] += 1
@@ -149,7 +151,6 @@ def soft_update_target():
 def do_skip_round(adversary, record):
     # state is discard, tileset, and last tile
     states = env._get_all_obs()
-    states = [torch.tensor(state, dtype=torch.float32) for state in states]
     
     actions = [agent.select_action(states[0])] + [adversary.select_action(states[i]) for i in range(1, 4)]
     actions = [a.item() for a in actions]
@@ -192,9 +193,7 @@ def do_episode(adversary, state, record):
             if not (terminated or truncated): # Update last tile and go to next turn
                 continue
             else: # Adversary won, or game ran out of tiles
-                reward = -reward
-        
-        truncated = truncated
+                reward = -np.abs(reward)
 
         record.append((env._last_tile, action.item(), env._player_states[0])) # for logging
         reward = torch.tensor([reward])
@@ -203,7 +202,7 @@ def do_episode(adversary, state, record):
         if terminated:
             next_state = None
         else:
-            next_state = torch.tensor(observation, dtype=torch.float32)
+            next_state = observation
         
         # Store experience in memory
         memory.push(state, action, next_state, reward)
@@ -223,37 +222,53 @@ def train():
     options = {'discard_model': discard_net, 'handle_invalid_action': 'penalty'}
     agent.policy_net.train()
 
-    for i_episode in range(1001):
-        state, _ = env.reset(options=options) # Starting state with 1 discarded tile, player 1 (adversary) starts
-        state = torch.from_numpy(state).float()
+    for i_episode in range(10):
+        state, _ = env.reset(options=options) # State is player_1 (adversary) starting hand and the tile placed by player_0
         record = []
+
+        print(state)
 
         do_episode(adversary, state, record)
 
         print()
         print(f'episode {i_episode} complete')
         print(f'ending deck size: {len(env._deck)}')
-        if len(env._deck) > 0:
-            for i, p in enumerate(env._player_states):
-                if env.can_hu(p, env._last_tile):
-                    print(f'player {i} hu')
-                    print(env._last_tile)
-                    print(env._player_states[i]._tileset_full)
-                    break
 
         # Adversary net improvements
+        do_sanity_check(record)
         if i_episode % 10 == 0:
             print(f'episode {i_episode}')
             do_sanity_check(record)
 
             adversary_net = get_adversary_net(agent.policy_net)
-            adversary = EGAgent(adversary_net)
+            adversary.policy_net = adversary_net
 
     agent.policy_net.eval()
 
+    sns.lineplot(x=np.arange(len(losses)), y=losses)
+    plt.show()
+
 if __name__ == '__main__':
+    env = MahjongEnv()
+
+    n_actions = env.action_space.n
+    n_observations = 36 + 1 # 36 tile grid, last tile, 4 actions
+
+    discard_net = DQN(36 + 36, 36) # my tiles, discarded tiles
+
+    state_dict = torch.load(LOADPATH, weights_only=True)
+    policy_net = DQN(37, n_actions)
+    policy_net.load_state_dict(state_dict=state_dict)
+    # policy_net = DQN(n_observations, n_actions)
+    target_net = generate_target_net(policy_net)
+    policy_optim = torch.optim.Adam(policy_net.parameters(), lr=LR)
+    agent = EGAgent(policy_net)
+    memory = ReplayMemory(10000)
+
+    losses = []
+
     try:
         train()
     finally:
-        torch.save(agent.policy_net.state_dict(), f"./state_dicts/2024-08-28_policy_net_1")
+        torch.save(agent.policy_net.state_dict(), SAVEPATH)
         env.close()

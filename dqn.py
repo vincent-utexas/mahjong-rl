@@ -30,9 +30,14 @@ class DQN(nn.Module):
         self.model = nn.Sequential(
             nn.Linear(n_observations, 128),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(128, 256),
             nn.ReLU(),
-            nn.Dropout(),
+            nn.Linear(256, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
             nn.Linear(128, n_actions)
         )
 

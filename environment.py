@@ -15,8 +15,6 @@ from actions.hu import Hu
 from tileset import TileSet
 from player import Player
 
-# todo: turn skipping !
-
 class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
     metadata = {'render_modes': ['human']}
 
@@ -126,10 +124,11 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
         self._last_tile = self.discard(agent, self._discarded, self._discard_model)
 
         # Check for game end conditions
+        # Note that only the agent would receive these rewards
         truncated = len(self._deck) <= 0
         terminated = action == 4
         if terminated or truncated:
-            reward = int(terminated) or -int(truncated)
+            reward = int(terminated) * 50 or -int(truncated)
         else:
             reward = i_action * self._valid_reward
        
@@ -193,19 +192,20 @@ class MahjongEnv(gym.Env, Draw, Discard, Chi, Pung, Gan, Hu):
         if self._current_player >= 4:
             self._current_player = 0
 
-    def _get_obs(self):
-        # board_state = self._discarded.ravel()
-        player_state = self._player_states[self._current_player].tileset.to_grid()
-        # concat_state = np.append(board_state, player_state)
-        return np.append(player_state, self._last_tile.to_int())
-    
+    def _get_obs(self, i_player=None):
+        i_player = i_player or self._current_player
+
+        observation = {'tileset': None, 'tileset_full': None, 'last_tile': None}
+        observation['tileset'] = self._player_states[i_player].tileset.to_grid().flatten()
+        observation['tileset_full'] = self._player_states[i_player]._tileset_full.to_grid().flatten()
+        observation['last_tile'] = self._last_tile.to_int()
+        
+        return observation
+
     def _get_all_obs(self):
-        # board_state = self._discarded.ravel()
         result = []
         for i in range(len(self._player_states)):
-            player_state = self._player_states[i].tileset.to_grid()
-            # concat_state = np.append(board_state, player_state)
-            result += [np.append(player_state, self._last_tile.to_int())]
+            result += [self._get_obs(i)]
 
         return result
 

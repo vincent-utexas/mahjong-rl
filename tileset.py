@@ -6,8 +6,11 @@ from tile import Tile, type_ranges
 type classes = Literal['c', 'b', 'w', 'h']
 
 class TileSet:
-    def __init__(self, tiles: list[int]=[]):
-        self.tiles_n = np.array(tiles)
+    def __init__(self, tiles: Iterable=[]):
+        if isinstance(tiles, list):
+            self.tiles_n = np.array(tiles)
+        else:
+            self.tiles_n = tiles
         self.tiles = np.array([Tile.from_int(n) for n in tiles])
 
     def has(self, cls: classes):

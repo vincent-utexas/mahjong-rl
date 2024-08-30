@@ -11,13 +11,14 @@ class Hu:
         if sets < 3:
             return False
     
-        can_make_fourth_set = Chi.can_chi(player.tileset, last_tile) or \
-            Pung.can_pung(player.tileset, last_tile)
+        can_make_fourth_set = Chi.can_chi(player, last_tile) or \
+            Pung.can_pung(player, last_tile)
         
-        if not can_make_fourth_set:
+        if not can_make_fourth_set and sets < 4: # May be looking for a pair
             return False
         
         bincount = np.bincount(player._tileset_full.tiles_n, minlength=36)
+        bincount[last_tile.to_int()] += 1
         pair_exists = (bincount == 2).any()
         return pair_exists
 
