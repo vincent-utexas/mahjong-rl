@@ -12,9 +12,7 @@ class Chi:
         return valid_axes.any()
 
     @staticmethod
-    def chi(player, last_tile, deck, discard):
-        assert Chi.can_chi(player, last_tile)
-        
+    def chi(player, last_tile, deck, discard):        
         # Rule: always take more central tiles so we (hopefully) discard edge tiles
         min, max = type_ranges[last_tile.type]
         n = last_tile.to_int()
@@ -27,11 +25,9 @@ class Chi:
         tiles_to_freeze = bounds[idx] # the 2 surrounding tiles as numbers
         for t in tiles_to_freeze:
             player.tileset.remove(t)
-            player.frozen.add(t)
             coords = (math.floor(t / 9), t % 9 + 1) # grid coords
             discard[coords] += 1
 
-        player.frozen.add(last_tile)
         player._tileset_full.add(last_tile)
         discard[last_tile.to_coords()] += 1
 

@@ -10,11 +10,9 @@ class Pung:
 
     @staticmethod
     def pung(player, last_tile, deck, discard):
-        assert Pung.can_pung(player, last_tile)
         coords = last_tile.to_coords()
         discard[coords] += 3
         tiles_to_freeze = player.tileset.remove(last_tile, manner='all')
         if len(tiles_to_freeze) >= 3: # grabbed a gan, add one back
             player.tileset.add(last_tile)
-        player.frozen.add(tiles_to_freeze)
         player._tileset_full.add(last_tile)

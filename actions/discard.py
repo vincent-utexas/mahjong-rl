@@ -9,7 +9,6 @@ class Discard:
         for t in player.tileset:
             tileset_grid[t.to_coords()] += 1
         
-        discard_pile = torch.from_numpy(discard_pile).float()
         input = torch.cat([torch.flatten(tileset_grid), torch.flatten(discard_pile)])
         tile_values = model(input) # 36 vector
 

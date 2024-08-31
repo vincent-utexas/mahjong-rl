@@ -10,10 +10,9 @@ class Gan:
 
     @staticmethod
     def gan(player, last_tile, deck, discard):
-        assert Gan.can_gan(player, last_tile)
         coords = last_tile.to_coords()
         discard[coords] += 4
         tiles_to_freeze = player.tileset.remove(last_tile, manner='all')
-        player.frozen.add(tiles_to_freeze)
         player._tileset_full.add(last_tile)
-        Draw.draw(player, last_tile, deck, discard)
+        if len(deck) > 0:
+            Draw.draw(player, last_tile, deck, discard)
