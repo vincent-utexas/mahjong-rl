@@ -1,11 +1,10 @@
 import numpy as np
-from player import Player
 from actions.chi import Chi
 from actions.pung import Pung
 
 class Hu:
     @staticmethod
-    def can_hu(player: Player, last_tile):
+    def can_hu(player, last_tile):
         # Check for 3 sets, build 4th with last_tile
         sets = player.stats['n_chi'] + player.stats['n_pung'] + player.stats['n_gan']
         if sets < 3:

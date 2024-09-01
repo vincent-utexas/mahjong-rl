@@ -10,6 +10,43 @@ device = torch.device(
     "cpu"
 )
 
+configs = {
+    'wide': lambda n_observations, n_actions: nn.Sequential(
+        nn.Linear(n_observations, 256),
+        nn.ReLU(),
+        nn.Linear(256, 1024),
+        nn.ReLU(),
+        nn.Linear(1024, 256),
+        nn.ReLU(),
+        nn.Linear(256, n_actions)),
+    'conv2d': lambda n_observations, n_actions: nn.Sequential(
+        nn.Conv2d(in_channels=1, out_channels=4,
+                  kernel_size=3, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(in_channels=4, out_channels=8,
+                  kernel_size=3, padding=1),
+        nn.ReLU(),
+        nn.Flatten(),
+        nn.Linear(36*8, 288),
+        nn.ReLU(),
+        nn.Linear(288, n_actions)
+    ),
+    'conv2d_deep': lambda n_observations, n_actions: nn.Sequential(
+        nn.Conv2d(in_channels=1, out_channels=4,
+                  kernel_size=3, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(in_channels=4, out_channels=8,
+                  kernel_size=3, padding=1),
+        nn.ReLU(),
+        nn.Flatten(),
+        nn.Linear(36*8, 288),
+        nn.ReLU(),
+        nn.Linear(288, 288),
+        nn.ReLU(),
+        nn.Linear(288, n_actions)
+        )
+}
+
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 class ReplayMemory:
     def __init__(self, capacity=1000):
@@ -23,23 +60,3 @@ class ReplayMemory:
     
     def __len__(self):
         return len(self.memory)
-
-class DQN(nn.Module):
-    def __init__(self, n_observations, n_actions):
-        super(DQN, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(n_observations, 128),
-            nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Linear(256, 512),
-            nn.ReLU(),
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, n_actions)
-        )
-
-    def forward(self, x):
-        return self.model(x)
